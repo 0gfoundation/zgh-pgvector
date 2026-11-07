@@ -1,0 +1,90 @@
+name: build
+
+on:
+  workflow_dispatch:
+    inputs:
+      pgvector_version:
+        description: pgvector tag, without the v
+        default: "0.8.7"
+      pg_major:
+        description: Postgres major version
+        default: "18"
+      zonky_version:
+        description: zonky embedded-postgres-binaries version the smoke loads into
+        default: "18.6.0"
+
+permissions:
+  contents: read
+
+env:
+  VER: ${{ inputs.pgvector_version }}
+  MAJOR: ${{ inputs.pg_major }}
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: darwin-arm64v8, runner: macos-15, os: macos }
+          - { target: darwin-amd64, runner: macos-15-intel, os: macos }
+          - { target: linux-amd64, runner: ubuntu-latest, os: linux }
+          - { target: linux-arm64v8, runner: ubuntu-24.04-arm, os: linux }
+    env:
+      ASSET: pgvector-${{ inputs.pgvector_version }}-pg${{ inputs.pg_major }}-${{ matrix.target }}.tar.gz
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          scripts/build-macos.sh "$VER" "$MAJOR" "$RUNNER_TEMP/stage"
+          echo "$(brew --prefix postgresql@$MAJOR)/bin" >> "$GITHUB_PATH"
+
+      - name: Build (Debian bookworm)
+        if: matrix.os == 'linux'
+        run: |
+          docker run --rm -v "$PWD:/w" -v "$RUNNER_TEMP:/out" debian:bookworm \
+            /w/scripts/build-linux.sh "$VER" "$MAJOR" /out/stage
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/stage"
+          sudo apt-get install -y -qq postgresql-client >/dev/null
+
+      - name: Package
+        run: scripts/package.sh "$RUNNER_TEMP/stage" "$ASSET"
+
+      - name: Smoke in zonky ${{ inputs.zonky_version }}
+        run: scripts/smoke.sh "${{ matrix.target }}" "${{ inputs.zonky_version }}" "$ASSET"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    # Runs from a branch build and smoke only; main publishes.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: pgvector-${{ inputs.pgvector_version }}-pg${{ inputs.pg_major }}
+        run: |
+          cd dist
+          test "$(ls *.tar.gz | wc -l)" -eq 4
+          sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          gh release create "$TAG" *.tar.gz SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" \
+            --notes "pgvector $VER built for Postgres $MAJOR, smoke-tested in zonky embedded-postgres-binaries ${{ inputs.zonky_version }}. Built by run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
