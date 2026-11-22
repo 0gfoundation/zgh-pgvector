@@ -31,9 +31,10 @@ zonky's windows-amd64 bundle is EDB's Windows binaries zip, repackaged
 without `include/` or `postgres.lib`. The Windows build takes those from the
 same EDB zip and fails unless its `postgres.exe` is byte-identical to the
 zonky bundle's. pgvector's `Makefile.win` sets no `/arch`, so the DLL runs
-on any x64 CPU. The build fails if `vector.dll` imports a DLL other than
-`postgres.exe` and the ones zonky's `postgres.exe` imports itself (the
-Universal CRT and `VCRUNTIME140.dll`, which zonky does not bundle).
+on any x64 CPU, and passes no `/MD`, so the C runtime is linked statically.
+The build fails if `vector.dll` imports a DLL other than `postgres.exe` and
+the ones zonky's `postgres.exe` imports itself; 0.8.7's imports are
+`postgres.exe` and `KERNEL32.dll`.
 
 ## Release assets
 
