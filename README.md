@@ -29,8 +29,9 @@ resolves a library outside `/lib` and `/usr/lib`.
 
 zonky's windows-amd64 bundle is EDB's Windows binaries zip, repackaged
 without `include/` or `postgres.lib`. The Windows build takes those from the
-same EDB zip and fails unless its `postgres.exe` is byte-identical to the
-zonky bundle's. pgvector's `Makefile.win` sets no `/arch`, so the DLL runs
+same EDB zip, pinned by sha256 in `scripts/build-windows.sh` (EDB publishes
+none), and fails unless its `postgres.exe` is byte-identical to the zonky
+bundle's. pgvector's `Makefile.win` sets no `/arch`, so the DLL runs
 on any x64 CPU, and passes no `/MD`, so the C runtime is linked statically.
 The build fails if `vector.dll` imports a DLL other than `postgres.exe` and
 the ones zonky's `postgres.exe` imports itself; 0.8.7's imports are
@@ -87,10 +88,14 @@ gh workflow run build.yml -R 0gfoundation/zgh-pgvector \
 ```
 
 Only a run from `main` publishes; a run from another branch
-(`--ref <branch>`) builds and smoke-tests. The release job fails if the
-tag already exists: published assets never
-change, because zgh pins their hashes. For a new pgvector or Postgres
-version, run it with new inputs, then update the pins in zgh.
+(`--ref <branch>`) builds and smoke-tests. Published assets never change,
+because zgh pins their hashes. On a new tag the release job
+(`scripts/release.sh`) publishes every tarball and `SHA256SUMS`. If the tag
+already exists, it uploads only the tarballs the release lacks, each with a
+`SHA256SUMS-<target>`, and never with `--clobber`. It fails if the release
+already has every tarball, or if any asset that was there before changed its
+digest. For a new pgvector or Postgres version, run it with new inputs, then
+update the pins in zgh.
 
 ## License
 
