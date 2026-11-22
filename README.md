@@ -19,12 +19,22 @@ Named as zonky names them:
 | `darwin-amd64`   | `macos-15-intel`, Homebrew `postgresql@18` |
 | `linux-amd64`    | `debian:bookworm` on `ubuntu-latest`, PGDG `postgresql-server-dev-18` |
 | `linux-arm64v8`  | `debian:bookworm` on `ubuntu-24.04-arm`, PGDG `postgresql-server-dev-18` |
+| `windows-amd64`  | `windows-latest`, MSVC `nmake /F Makefile.win` against EDB's `postgresql-18.6-1-windows-x64-binaries.zip` |
 
 All builds pass `OPTFLAGS=""`, so they skip pgvector's default
 `-march=native` and run on any CPU of the arch. macOS builds set
 `MACOSX_DEPLOYMENT_TARGET=11.0`, and the build fails if `otool -L` lists
 a library outside `/usr/lib` and `/System`. Linux builds fail if `ldd`
 resolves a library outside `/lib` and `/usr/lib`.
+
+zonky's windows-amd64 bundle is EDB's Windows binaries zip, repackaged
+without `include/` or `postgres.lib`. The Windows build takes those from the
+same EDB zip and fails unless its `postgres.exe` is byte-identical to the
+zonky bundle's. pgvector's `Makefile.win` sets no `/arch`, so the DLL runs
+on any x64 CPU, and passes no `/MD`, so the C runtime is linked statically.
+The build fails if `vector.dll` imports a DLL other than `postgres.exe` and
+the ones zonky's `postgres.exe` imports itself; 0.8.7's imports are
+`postgres.exe` and `KERNEL32.dll`.
 
 ## Release assets
 
@@ -38,6 +48,15 @@ share/postgresql/extension/vector.control
 share/postgresql/extension/vector--*.sql
 ```
 
+or, for `windows-amd64`, whose zonky bundle has no `postgresql/` level:
+
+```
+LICENSE
+lib/vector.dll
+share/extension/vector.control
+share/extension/vector--*.sql
+```
+
 The paths match zonky's bundle layout: unpack a tarball over an unpacked
 bundle and `CREATE EXTENSION vector` works.
 
@@ -46,7 +65,8 @@ bundle and `CREATE EXTENSION vector` works.
 Before publishing, each target's job downloads the zonky bundle
 `io.zonky.test.postgres:embedded-postgres-binaries-<target>` from Maven
 Central, checks it against Maven's `.sha256`, copies the tarball in,
-runs `initdb`, starts Postgres on a Unix socket, and checks:
+runs `initdb`, starts Postgres on a Unix socket (Windows: TCP on
+127.0.0.1, with EDB's `psql`, since zonky ships none), and checks:
 
 - `CREATE EXTENSION vector`;
 - `SELECT '[1,2,3]'::vector <-> '[2,3,5]'` returns `2.449489742783178`;
@@ -55,7 +75,7 @@ runs `initdb`, starts Postgres on a Unix socket, and checks:
   `[1,0,0]`, and the plan uses the index.
 
 On Linux it also fails if `vector.so` needs a newer glibc than zonky's
-own `postgres` binary. The release job runs only when all four pass.
+own `postgres` binary. The release job runs only when all five pass.
 
 ## Re-running the build
 
