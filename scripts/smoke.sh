@@ -42,16 +42,20 @@ pg/bin/initdb -D data -U zgh -A trust -E UTF8 --locale=C >/dev/null
 case "$target" in
   windows-*)
     # TCP on loopback, on a port the OS picks: no Unix socket for psql on Windows.
-    port=$(python -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
-    listen="-c listen_addresses=127.0.0.1 -p $port"
-    conn=(-h 127.0.0.1 -p "$port") ;;
+    # The port is free when picked, not when Postgres binds it: one retry on a new port.
+    for try in 1 2; do
+      port=$(python -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+      conn=(-h 127.0.0.1 -p "$port")
+      pg/bin/pg_ctl -D data -l pg.log -w -o "-c listen_addresses=127.0.0.1 -p $port" start && break
+      cat pg.log
+      [ "$try" = 2 ] && exit 1
+    done ;;
   *)
     mkdir s
-    listen="-c listen_addresses='' -k $work/s"
-    conn=(-h "$work/s") ;;
+    conn=(-h "$work/s")
+    pg/bin/pg_ctl -D data -l pg.log -w -o "-c listen_addresses='' -k $work/s" start \
+      || { cat pg.log; exit 1; } ;;
 esac
-pg/bin/pg_ctl -D data -l pg.log -w -o "$listen" start \
-  || { cat pg.log; exit 1; }
 trap 'pg/bin/pg_ctl -D "$work/data" -m fast stop >/dev/null || true' EXIT
 
 # tr: a Windows psql ends lines with CRLF.

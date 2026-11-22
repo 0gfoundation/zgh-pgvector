@@ -15,7 +15,14 @@ cd "$work"
 # zonky 18.6.0 repackages postgresql-18.6-1-windows-x64-binaries.zip.
 edb_ver=${zver%.0}-1
 case "$zver" in *.0) ;; *) echo "unexpected zonky version $zver" >&2; exit 1 ;; esac
+# EDB publishes no checksums, and the cmp below covers only postgres.exe, not the
+# headers compiled into vector.dll: pin each zip. A new version needs its hash added.
+case "$edb_ver" in
+  18.6-1) edb_sha256=fbe23da234ee31547bf8a36d29dfd81e82b849df2d2b78d2eecb43d360252f8c ;;
+  *) echo "no pinned sha256 for EDB $edb_ver; add one to $0" >&2; exit 1 ;;
+esac
 curl -fsSL --retry 5 -o edb.zip "https://get.enterprisedb.com/postgresql/postgresql-$edb_ver-windows-x64-binaries.zip"
+echo "$edb_sha256  edb.zip" | sha256sum -c
 rm -rf "$edb"; mkdir -p "$edb"
 # Windows' own bsdtar, not Git Bash's unzip: that one's 'pgsql/include/*' skipped include/server.
 "$SYSTEMROOT/System32/tar.exe" -xf edb.zip -C "$edb" pgsql/bin pgsql/include pgsql/lib
