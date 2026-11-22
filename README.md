@@ -94,9 +94,8 @@ because zgh pins their hashes. On a new tag the release job
 already exists, it uploads only the tarballs the release lacks, each with a
 `SHA256SUMS-<target>`, and never with `--clobber`. It fails if the release
 already has every tarball, or if any asset that was there before changed its
-digest. That is how `windows-amd64` joined `pgvector-0.8.7-pg18`. For a new
-pgvector or Postgres version, run it with new inputs, then update the pins in
-zgh.
+digest. For a new pgvector or Postgres version, run it with new inputs, then
+update the pins in zgh.
 
 ## License
 
