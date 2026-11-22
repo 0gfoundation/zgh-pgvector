@@ -32,6 +32,10 @@ jobs:
           - { target: darwin-amd64, runner: macos-15-intel, os: macos }
           - { target: linux-amd64, runner: ubuntu-latest, os: linux }
           - { target: linux-arm64v8, runner: ubuntu-24.04-arm, os: linux }
+          - { target: windows-amd64, runner: windows-latest, os: windows }
+    defaults:
+      run:
+        shell: bash
     env:
       ASSET: pgvector-${{ inputs.pgvector_version }}-pg${{ inputs.pg_major }}-${{ matrix.target }}.tar.gz
     steps:
@@ -50,6 +54,12 @@ jobs:
             /w/scripts/build-linux.sh "$VER" "$MAJOR" /out/stage
           sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/stage"
           sudo apt-get install -y -qq postgresql-client >/dev/null
+
+      - name: Build (Windows, MSVC)
+        if: matrix.os == 'windows'
+        run: |
+          scripts/build-windows.sh "$VER" "${{ inputs.zonky_version }}" "$RUNNER_TEMP/stage" "$RUNNER_TEMP/edb"
+          echo "$RUNNER_TEMP/edb/pgsql/bin" >> "$GITHUB_PATH"
 
       - name: Package
         run: scripts/package.sh "$RUNNER_TEMP/stage" "$ASSET"
@@ -82,7 +92,7 @@ jobs:
           TAG: pgvector-${{ inputs.pgvector_version }}-pg${{ inputs.pg_major }}
         run: |
           cd dist
-          test "$(ls *.tar.gz | wc -l)" -eq 4
+          test "$(ls *.tar.gz | wc -l)" -eq 5
           sha256sum *.tar.gz > SHA256SUMS
           cat SHA256SUMS
           gh release create "$TAG" *.tar.gz SHA256SUMS \
