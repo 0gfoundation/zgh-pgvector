@@ -49,6 +49,8 @@ case "$target" in
       pg/bin/pg_ctl -D data -l pg.log -w -o "-c listen_addresses=127.0.0.1 -p $port" start && break
       cat pg.log
       [ "$try" = 2 ] && exit 1
+      # A -w timeout can leave the postmaster up; stop it so try 2 owns the data dir.
+      pg/bin/pg_ctl -D data -m immediate stop >/dev/null 2>&1 || true
     done ;;
   *)
     mkdir s
